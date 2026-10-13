@@ -1,0 +1,1464 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from sgp4.api import Satrec, jday
+from datetime import datetime, timezone, timedelta
+from extra_satellites import (
+    load_extra_satellites,
+    build_extra_orbits,
+    build_analytics_series,
+    analytics_key,
+)
+import math
+
+
+
+
+
+# ============================================================
+# ORBITAL ELEMENT CALCULATION
+# ============================================================
+
+EARTH_MU = 398600.4418  # km^3/s^2
+
+
+def calculate_orbital_elements(position_km, velocity_km_s):
+    """
+    Convert SGP4 position and velocity into classical
+    orbital elements.
+
+    Returns:
+        RAAN                 degrees
+        Inclination          degrees
+        Argument of Perigee  degrees
+        Semi-Major Axis      km
+        Eccentricity
+    """
+
+    rx = position_km["x"]
+    ry = position_km["y"]
+    rz = position_km["z"]
+
+    vx = velocity_km_s["x"]
+    vy = velocity_km_s["y"]
+    vz = velocity_km_s["z"]
+
+    r_vec = [rx, ry, rz]
+    v_vec = [vx, vy, vz]
+
+    r = math.sqrt(
+        rx**2 +
+        ry**2 +
+        rz**2
+    )
+
+    v = math.sqrt(
+        vx**2 +
+        vy**2 +
+        vz**2
+    )
+
+    # --------------------------------------------------------
+    # Angular momentum
+    # --------------------------------------------------------
+
+    hx = ry * vz - rz * vy
+    hy = rz * vx - rx * vz
+    hz = rx * vy - ry * vx
+
+    h = math.sqrt(
+        hx**2 +
+        hy**2 +
+        hz**2
+    )
+
+    # --------------------------------------------------------
+    # Inclination
+    # --------------------------------------------------------
+
+    inclination = math.degrees(
+        math.acos(
+            max(
+                -1.0,
+                min(1.0, hz / h)
+            )
+        )
+    )
+
+    # --------------------------------------------------------
+    # Node vector
+    # --------------------------------------------------------
+
+    nx = -hy
+    ny = hx
+
+    n = math.sqrt(
+        nx**2 +
+        ny**2
+    )
+
+    # --------------------------------------------------------
+    # Eccentricity vector
+    # --------------------------------------------------------
+
+    rv = (
+        rx * vx +
+        ry * vy +
+        rz * vz
+    )
+
+    factor = (
+        (v**2 - EARTH_MU / r)
+    )
+
+    ex = (
+        factor * rx -
+        rv * vx
+    ) / EARTH_MU
+
+    ey = (
+        factor * ry -
+        rv * vy
+    ) / EARTH_MU
+
+    ez = (
+        factor * rz -
+        rv * vz
+    ) / EARTH_MU
+
+    eccentricity = math.sqrt(
+        ex**2 +
+        ey**2 +
+        ez**2
+    )
+
+    # --------------------------------------------------------
+    # Semi-major axis
+    # --------------------------------------------------------
+
+    specific_energy = (
+        (v**2 / 2) -
+        (EARTH_MU / r)
+    )
+
+    semi_major_axis = (
+        -EARTH_MU /
+        (2 * specific_energy)
+    )
+
+    # --------------------------------------------------------
+    # RAAN
+    # --------------------------------------------------------
+
+    if n > 1e-12:
+
+        raan = math.degrees(
+            math.atan2(ny, nx)
+        ) % 360.0
+
+    else:
+
+        raan = 0.0
+
+    # --------------------------------------------------------
+    # Argument of Perigee
+    # --------------------------------------------------------
+
+    if n > 1e-12 and eccentricity > 1e-12:
+
+        # n × e
+        cross_ne_x = (
+            ny * ez
+        )
+
+        cross_ne_y = (
+            -nx * ez
+        )
+
+        cross_ne_z = (
+            nx * ey -
+            ny * ex
+        )
+
+        numerator = (
+            cross_ne_x * hx +
+            cross_ne_y * hy +
+            cross_ne_z * hz
+        )
+
+        denominator = (
+            n *
+            eccentricity *
+            h
+        )
+
+        arg_perigee = math.degrees(
+            math.atan2(
+                numerator / denominator,
+                (
+                    nx * ex +
+                    ny * ey
+                ) /
+                (n * eccentricity)
+            )
+        ) % 360.0
+
+    else:
+
+        arg_perigee = 0.0
+
+    return {
+        "raan_deg": raan,
+        "inclination_deg": inclination,
+        "argument_of_perigee_deg": arg_perigee,
+        "semi_major_axis_km": semi_major_axis,
+        "eccentricity": eccentricity,
+    }
+
+app = FastAPI()
+
+
+# ============================================================
+# CORS
+# ============================================================
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ============================================================
+# ROOT
+# ============================================================
+
+@app.get("/")
+def root():
+    return {"message": "CASPER Backend is running"}
+
+
+# ============================================================
+# SATELLITE API
+# ============================================================
+
+@app.get("/satellite")
+def get_satellite():
+
+    # ========================================================
+    # ISS TLE SEGMENTS
+    # Used for TLE divergence experiment
+    # ========================================================
+
+    iss_segments = [
+        {
+            "name": "ISS-S01",
+            "line1": "1 25544C 98067A   26275.58333333  .00106030  00000+0  19380-2 0    19",
+            "line2": "2 25544  51.6307 128.5929 0007126 212.8943  84.6070 15.48685067    11",
+        },
+        {
+            "name": "ISS-S02",
+            "line1": "1 25544C 98067A   26275.83333333  .00066381  00000+0  12130-2 0    28",
+            "line2": "2 25544  51.6318 127.3595 0006942 214.7466  37.5168 15.48705473    14",
+        },
+        {
+            "name": "ISS-S03",
+            "line1": "1 25544C 98067A   26276.08333333  .00067084  00000+0  12265-2 0    37",
+            "line2": "2 25544  51.6305 126.1238 0006757 216.5472 350.4848 15.48690938    13",
+        },
+        {
+            "name": "ISS-S04",
+            "line1": "1 25544C 98067A   26276.33333333 -.00085498  00000+0 -15621-2 0    46",
+            "line2": "2 25544  51.6317 124.8877 0006784 218.4657 303.3218 15.48747692    14",
+        },
+        {
+            "name": "ISS-S05",
+            "line1": "1 25544C 98067A   26276.58333333  .00118830  00000+0  21711-2 0    56",
+            "line2": "2 25544  51.6310 123.6475 0007071 216.2525 260.3106 15.48694600    16",
+        },
+        {
+            "name": "ISS-S06",
+            "line1": "1 25544C 98067A   26276.83333333  .00010461  00000+0  19111-3 0    68",
+            "line2": "2 25544  51.6317 122.4144 0006841 218.4005 212.9306 15.48727009    19",
+        },
+        {
+            "name": "ISS-S07",
+            "line1": "1 25544C 98067A   26277.08333333  .00049183  00000+0  89894-3 0    75",
+            "line2": "2 25544  51.6304 121.1785 0006692 220.4959 165.6103 15.48703969    15",
+        },
+        {
+            "name": "ISS-S08",
+            "line1": "1 25544C 98067A   26277.33333333 -.00101570  00000+0 -18555-2 0    80",
+            "line2": "2 25544  51.6309 119.9423 0006791 222.4009 118.4690 15.48756573    18",
+        },
+        {
+            "name": "ISS-S09",
+            "line1": "1 25544C 98067A   26277.58333333  .00073578  00000+0  13440-2 0    90",
+            "line2": "2 25544  51.6308 118.7025 0007074 220.1271  75.5207 15.48712922    10",
+        },
+        {
+            "name": "ISS-S10",
+            "line1": "1 25544C 98067A   26277.83333333  .00050858  00000+0  92893-3 0   106",
+            "line2": "2 25544  51.6310 117.4692 0006859 222.2772  28.1486 15.48721811    18",
+        },
+    ]
+
+
+    # ========================================================
+    # PHYSICAL SATELLITE CATALOGUE
+    # One TLE per physical satellite
+    # ========================================================
+
+    satellites = [
+        {
+            "name": "ISS (ZARYA)",
+            "norad_id": 25544,
+            "line1": "1 25544C 98067A   26275.58333333  .00106030  00000+0  19380-2 0    19",
+            "line2": "2 25544  51.6307 128.5929 0007126 212.8943  84.6070 15.48685067    11",
+        },
+        {
+            "name": "CSS (TIANHE)",
+            "norad_id": 48274,
+            "line1": "1 48274C 21035A   26275.00000000  .00113170  00000+0  13433-2 0    10",
+            "line2": "2 48274  41.4713  33.3582 0002395 321.0136  60.8438 15.60208061    15",
+        },
+        {
+            "name": "CSS (WENTIAN)",
+            "norad_id": 53239,
+            "line1": "1 53239U 22085A   26275.76424103  .00013894  00000+0  16924-3 0  9997",
+            "line2": "2 53239  41.4698  28.7100 0002103 323.3303  36.7391 15.60239502288232",
+        },
+        {
+            "name": "LEOPARD",
+            "norad_id": 67687,
+            "line1": "1 67687U 98067YE  26275.82243670  .00180715  00000+0  92918-3 0  9991",
+            "line2": "2 67687  51.6211 106.0006 0009616 241.1757 118.8280 15.80080957 37094",
+        },
+    ]
+    extra_satellites = load_extra_satellites([s["norad_id"] for s in satellites])
+    satellites = satellites + extra_satellites
+
+    # ========================================================
+    # CURRENT UTC TIME
+    # ========================================================
+
+    now = datetime.now(timezone.utc)
+
+
+    # ========================================================
+    # CURRENT TIME → JULIAN DATE
+    # ========================================================
+
+    jd, fr = jday(
+        now.year,
+        now.month,
+        now.day,
+        now.hour,
+        now.minute,
+        now.second + now.microsecond / 1_000_000,
+    )
+
+
+    # ========================================================
+    # PROPAGATE ALL 4 PHYSICAL SATELLITES
+    # ========================================================
+
+    satellite_results = []
+
+    for satellite_data in satellites:
+
+        satellite = Satrec.twoline2rv(
+            satellite_data["line1"],
+            satellite_data["line2"],
+        )
+
+        error, position, velocity = satellite.sgp4(jd, fr)
+
+        satellite_results.append(
+            {
+                "name": satellite_data["name"],
+                "norad_id": satellite_data["norad_id"],
+                "error_code": error,
+
+                "position_km": {
+                    "x": position[0],
+                    "y": position[1],
+                    "z": position[2],
+                },
+
+                "velocity_km_s": {
+                    "x": velocity[0],
+                    "y": velocity[1],
+                    "z": velocity[2],
+                },
+            }
+        )
+
+
+    # ========================================================
+    # NEW:
+    # PAIRWISE DISTANCES BETWEEN 4 PHYSICAL SATELLITES
+    #
+    # 4 satellites → 6 unique pairs
+    # ========================================================
+
+    pairwise_distances = []
+
+    for i in range(len(satellite_results)):
+
+        for j in range(i + 1, len(satellite_results)):
+
+            sat1 = satellite_results[i]
+            sat2 = satellite_results[j]
+
+            p1 = sat1["position_km"]
+            p2 = sat2["position_km"]
+
+            dx = p1["x"] - p2["x"]
+            dy = p1["y"] - p2["y"]
+            dz = p1["z"] - p2["z"]
+
+            distance_km = (
+                dx**2 +
+                dy**2 +
+                dz**2
+            ) ** 0.5
+
+            pairwise_distances.append(
+                {
+                    "satellite_1": sat1["name"],
+                    "satellite_2": sat2["name"],
+                    "norad_id_1": sat1["norad_id"],
+                    "norad_id_2": sat2["norad_id"],
+                    "distance_km": distance_km,
+                }
+            )
+
+        # ========================================================
+    # TEMPORAL SCREENING - 5 MINUTE TIME GRID
+    # ========================================================
+
+    screening_start = now
+    screening_duration_hours = 3
+    screening_step_minutes = 5
+
+    screening_times = []
+
+    current_time = screening_start
+    end_time = screening_start + timedelta(
+        hours=screening_duration_hours
+    )
+
+    while current_time <= end_time:
+        screening_times.append(current_time)
+
+        current_time += timedelta(
+            minutes=screening_step_minutes
+        )
+
+    print("\n5-minute screening time grid:")
+    print("Start :", screening_start.isoformat())
+    print("End   :", end_time.isoformat())
+    print("Steps :", len(screening_times))
+
+        # ========================================================
+    # PROPAGATE 4 PHYSICAL SATELLITES OVER TIME
+    # ========================================================
+
+    temporal_positions = []
+
+    for time_point in screening_times:
+
+        time_jd, time_fr = jday(
+            time_point.year,
+            time_point.month,
+            time_point.day,
+            time_point.hour,
+            time_point.minute,
+            time_point.second
+            + time_point.microsecond / 1_000_000,
+        )
+
+        time_satellites = []
+
+        for satellite_data in satellites:
+
+            satellite = Satrec.twoline2rv(
+                satellite_data["line1"],
+                satellite_data["line2"],
+            )
+
+            error, position, velocity = satellite.sgp4(
+                time_jd,
+                time_fr,
+            )
+
+            if error == 0:
+
+                time_satellites.append(
+                    {
+                        "name": satellite_data["name"],
+                        "norad_id": satellite_data["norad_id"],
+                        "position_km": {
+                            "x": position[0],
+                            "y": position[1],
+                            "z": position[2],
+                        },
+                        "velocity_km_s": {
+                            "x": velocity[0],
+                            "y": velocity[1],
+                            "z": velocity[2],
+                        },
+                    }
+                )
+
+        temporal_positions.append(
+            {
+                "time_utc": time_point.isoformat(),
+                "satellites": time_satellites,
+            }
+        )
+
+    print("Temporal propagation points:", len(temporal_positions))
+
+        # ========================================================
+    # TEMPORAL PAIRWISE DISTANCES
+    # ========================================================
+
+    temporal_pairwise_distances = []
+
+    for time_data in temporal_positions:
+
+        time_satellites = time_data["satellites"]
+
+        for i in range(len(time_satellites)):
+
+            for j in range(i + 1, len(time_satellites)):
+
+                sat1 = time_satellites[i]
+                sat2 = time_satellites[j]
+
+                p1 = sat1["position_km"]
+                p2 = sat2["position_km"]
+
+                dx = p1["x"] - p2["x"]
+                dy = p1["y"] - p2["y"]
+                dz = p1["z"] - p2["z"]
+
+                distance_km = (
+                    dx**2 +
+                    dy**2 +
+                    dz**2
+                ) ** 0.5
+
+                temporal_pairwise_distances.append(
+                    {
+                        "time_utc": time_data["time_utc"],
+                        "satellite_1": sat1["name"],
+                        "satellite_2": sat2["name"],
+                        "distance_km": distance_km,
+                    }
+                )
+
+    print(
+        "Temporal pairwise distance records:",
+        len(temporal_pairwise_distances)
+    )
+
+    # ========================================================
+    # COARSE CONJUNCTION SCREENING
+    # ========================================================
+
+    SCREENING_THRESHOLD_KM = 20.0
+
+    conjunction_candidates = {}
+
+    for record in temporal_pairwise_distances:
+
+        pair_key = (
+            record["satellite_1"],
+            record["satellite_2"],
+        )
+
+        if pair_key not in conjunction_candidates:
+
+            conjunction_candidates[pair_key] = record
+
+        elif (
+            record["distance_km"]
+            < conjunction_candidates[pair_key]["distance_km"]
+        ):
+
+            conjunction_candidates[pair_key] = record
+
+    print("\nMinimum distance for each satellite pair:")
+
+    candidate_pairs = []
+
+    for pair, record in conjunction_candidates.items():
+
+        print(
+            f"{pair[0]} ↔ {pair[1]} : "
+            f"{record['distance_km']:.3f} km "
+            f"at {record['time_utc']}"
+        )
+
+        if record["distance_km"] <= SCREENING_THRESHOLD_KM:
+
+            candidate_pairs.append(record)
+
+    print(
+        f"\nScreening threshold: "
+        f"{SCREENING_THRESHOLD_KM:.1f} km"
+    )
+
+    print(
+        f"Candidate conjunction pairs: "
+        f"{len(candidate_pairs)}"
+    )
+
+    for candidate in candidate_pairs:
+
+        print(
+            f"  CANDIDATE: "
+            f"{candidate['satellite_1']} ↔ "
+            f"{candidate['satellite_2']} | "
+            f"{candidate['distance_km']:.3f} km"
+        )
+
+        # ========================================================
+        # ========================================================
+    # 1-MINUTE REFINEMENT AROUND CLOSEST APPROACH
+    # ========================================================
+
+    if not candidate_pairs:
+
+        print("\nNo conjunction candidates found.")
+        print("1-minute refinement skipped.")
+
+    else:
+
+        closest_pair = min(
+            candidate_pairs,
+            key=lambda record: record["distance_km"]
+        )
+
+        refinement_center = datetime.fromisoformat(
+            closest_pair["time_utc"]
+        )
+
+        refinement_start = (
+            refinement_center - timedelta(minutes=5)
+        )
+
+        refinement_end = (
+            refinement_center + timedelta(minutes=5)
+        )
+
+        refined_records = []
+
+        sat1_name = closest_pair["satellite_1"]
+        sat2_name = closest_pair["satellite_2"]
+
+        sat1_data = next(
+            sat for sat in satellites
+            if sat["name"] == sat1_name
+        )
+
+        sat2_data = next(
+            sat for sat in satellites
+            if sat["name"] == sat2_name
+        )
+
+        sat1 = Satrec.twoline2rv(
+            sat1_data["line1"],
+            sat1_data["line2"],
+        )
+
+        sat2 = Satrec.twoline2rv(
+            sat2_data["line1"],
+            sat2_data["line2"],
+        )
+
+        current_time = refinement_start
+
+        while current_time <= refinement_end:
+
+            refined_jd, refined_fr = jday(
+                current_time.year,
+                current_time.month,
+                current_time.day,
+                current_time.hour,
+                current_time.minute,
+                current_time.second
+                + current_time.microsecond / 1_000_000,
+            )
+
+            error1, position1, velocity1 = sat1.sgp4(
+                refined_jd,
+                refined_fr,
+            )
+
+            error2, position2, velocity2 = sat2.sgp4(
+                refined_jd,
+                refined_fr,
+            )
+
+            if error1 == 0 and error2 == 0:
+
+                dx = position1[0] - position2[0]
+                dy = position1[1] - position2[1]
+                dz = position1[2] - position2[2]
+
+                distance_km = (
+                    dx**2 +
+                    dy**2 +
+                    dz**2
+                ) ** 0.5
+
+                refined_records.append(
+                    {
+                        "time_utc": current_time.isoformat(),
+                        "distance_km": distance_km,
+                    }
+                )
+
+            current_time += timedelta(minutes=1)
+
+        refined_tca = min(
+            refined_records,
+            key=lambda record: record["distance_km"]
+        )
+
+        # Check whether the refined minimum is at the boundary
+        first_refined_time = refined_records[0]["time_utc"]
+        last_refined_time = refined_records[-1]["time_utc"]
+
+        boundary_case = (
+            refined_tca["time_utc"] == first_refined_time
+            or refined_tca["time_utc"] == last_refined_time
+        )
+
+        print("\n1-minute refined closest approach:")
+
+        print(
+            f"{sat1_name} ↔ {sat2_name} : "
+            f"{refined_tca['distance_km']:.3f} km "
+            f"at {refined_tca['time_utc']}"
+        )
+
+        if boundary_case:
+
+            print(
+                "WARNING: Minimum is at refinement boundary."
+            )
+
+            print(
+                "Extended refinement is required."
+            )
+
+        else:
+
+            print(
+                "TCA is inside the refinement window."
+            )
+
+    # ========================================================
+    # DEBUG INFORMATION
+    # ========================================================
+
+    print("Total ISS segments:", len(iss_segments))
+    print("Total physical satellites:", len(satellites))
+    print("Total satellite pairs:", len(pairwise_distances))
+
+
+    # ========================================================
+    # USE ISS SEGMENT 01 FOR MAIN 3-HOUR ORBIT
+    # ========================================================
+
+    satellite = Satrec.twoline2rv(
+        iss_segments[0]["line1"],
+        iss_segments[0]["line2"],
+    )
+
+
+    # ========================================================
+    # PROPAGATE ALL 10 ISS TLE SEGMENTS
+    # ========================================================
+
+    segment_results = []
+
+    for segment in iss_segments:
+
+        segment_satellite = Satrec.twoline2rv(
+            segment["line1"],
+            segment["line2"],
+        )
+
+        segment_error, segment_position, segment_velocity = (
+            segment_satellite.sgp4(jd, fr)
+        )
+
+        segment_results.append(
+            {
+                "name": segment["name"],
+                "error_code": segment_error,
+
+                "position_km": {
+                    "x": segment_position[0],
+                    "y": segment_position[1],
+                    "z": segment_position[2],
+                },
+
+                "velocity_km_s": {
+                    "x": segment_velocity[0],
+                    "y": segment_velocity[1],
+                    "z": segment_velocity[2],
+                },
+            }
+        )
+
+
+    # ========================================================
+    # DISTANCES BETWEEN ISS TLE SEGMENTS
+    # ========================================================
+
+    segment_distances = []
+
+    for i in range(len(segment_results)):
+
+        for j in range(i + 1, len(segment_results)):
+
+            p1 = segment_results[i]["position_km"]
+            p2 = segment_results[j]["position_km"]
+
+            dx = p1["x"] - p2["x"]
+            dy = p1["y"] - p2["y"]
+            dz = p1["z"] - p2["z"]
+
+            distance_km = (
+                dx**2 +
+                dy**2 +
+                dz**2
+            ) ** 0.5
+
+            segment_distances.append(
+                {
+                    "segment_1": segment_results[i]["name"],
+                    "segment_2": segment_results[j]["name"],
+                    "distance_km": distance_km,
+                }
+            )
+
+
+    # ========================================================
+    # TLE DIVERGENCE OVER NEXT 3 HOURS
+    # ========================================================
+
+    divergence_over_time = []
+
+    for minutes in range(0, 181, 30):
+
+        future_time = now + timedelta(minutes=minutes)
+
+        future_jd, future_fr = jday(
+            future_time.year,
+            future_time.month,
+            future_time.day,
+            future_time.hour,
+            future_time.minute,
+            future_time.second
+            + future_time.microsecond / 1_000_000,
+        )
+
+        future_positions = []
+
+        for segment in iss_segments:
+
+            segment_satellite = Satrec.twoline2rv(
+                segment["line1"],
+                segment["line2"],
+            )
+
+            future_error, future_position, future_velocity = (
+                segment_satellite.sgp4(
+                    future_jd,
+                    future_fr,
+                )
+            )
+
+            if future_error == 0:
+
+                future_positions.append(
+                    {
+                        "name": segment["name"],
+                        "x": future_position[0],
+                        "y": future_position[1],
+                        "z": future_position[2],
+                    }
+                )
+
+        distances = []
+
+        for i in range(len(future_positions)):
+
+            for j in range(i + 1, len(future_positions)):
+
+                p1 = future_positions[i]
+                p2 = future_positions[j]
+
+                dx = p1["x"] - p2["x"]
+                dy = p1["y"] - p2["y"]
+                dz = p1["z"] - p2["z"]
+
+                distance_km = (
+                    dx**2 +
+                    dy**2 +
+                    dz**2
+                ) ** 0.5
+
+                distances.append(distance_km)
+
+        if distances:
+
+            divergence_over_time.append(
+                {
+                    "minutes_from_now": minutes,
+                    "minimum_distance_km": min(distances),
+                    "maximum_distance_km": max(distances),
+                    "mean_distance_km": sum(distances) / len(distances),
+                }
+            )
+
+
+    # ========================================================
+    # CURRENT POSITION OF ISS SEGMENT 01
+    # ========================================================
+
+    error, position, velocity = satellite.sgp4(jd, fr)
+
+
+    # ========================================================
+    # FUTURE ISS ORBIT POSITIONS
+    # 10-second intervals for approximately 3 hours
+    # ========================================================
+
+    orbit = []
+
+    for i in range(1081):
+
+        future_time = now - timedelta(seconds=5400) + timedelta(seconds=i * 10)
+
+        future_jd, future_fr = jday(
+            future_time.year,
+            future_time.month,
+            future_time.day,
+            future_time.hour,
+            future_time.minute,
+            future_time.second
+            + future_time.microsecond / 1_000_000,
+        )
+
+        future_error, future_position, future_velocity = (
+            satellite.sgp4(
+                future_jd,
+                future_fr,
+            )
+        )
+
+        if future_error == 0:
+
+            orbit.append(
+                {
+                    "time_utc": future_time.isoformat(),
+
+                    "position_km": {
+                        "x": future_position[0],
+                        "y": future_position[1],
+                        "z": future_position[2],
+                    },
+                    "velocity_km_s": {
+                        "x": future_velocity[0],
+                        "y": future_velocity[1],
+                        "z": future_velocity[2],
+                     },
+                }
+            )
+         # ========================================================
+    # FUTURE TIANHE ORBIT POSITIONS
+    # 10-second intervals for approximately 3 hours
+    # ========================================================
+
+    tianhe_satellite = Satrec.twoline2rv(
+        satellites[1]["line1"],
+        satellites[1]["line2"],
+    )
+
+    tianhe_orbit = []
+
+    # 3 hours = 10800 seconds
+    # 10-second interval
+    # 0, 10, 20, ..., 10800
+    # Total = 1081 points
+
+    for i in range(1081):
+
+        future_time = now - timedelta(seconds=5400) + timedelta(
+    seconds=i * 10
+)
+
+        future_jd, future_fr = jday(
+            future_time.year,
+            future_time.month,
+            future_time.day,
+            future_time.hour,
+            future_time.minute,
+            future_time.second
+            + future_time.microsecond / 1_000_000,
+        )
+
+        future_error, future_position, future_velocity = (
+            tianhe_satellite.sgp4(
+                future_jd,
+                future_fr,
+            )
+        )
+
+        if future_error == 0:
+
+            tianhe_orbit.append(
+                {
+                    "time_utc": future_time.isoformat(),
+
+                    "position_km": {
+                        "x": future_position[0],
+                        "y": future_position[1],
+                        "z": future_position[2],
+                    },
+
+                    "velocity_km_s": {
+                        "x": future_velocity[0],
+                        "y": future_velocity[1],
+                        "z": future_velocity[2],
+                    },
+                }
+            )
+
+    print(
+        "TIANHE orbit points:",
+        len(tianhe_orbit)
+    )
+    # ============================================================
+    # FUTURE WENTIAN ORBIT POSITIONS
+    # 10-second intervals for approximately 3 hours
+    # ============================================================
+
+    wentian_satellite = Satrec.twoline2rv(
+        satellites[2]["line1"],
+        satellites[2]["line2"]
+    )
+
+    wentian_orbit = []
+
+    # 3 hours = 10800 seconds
+    # 10-second interval
+    # Total = 1081 points
+
+    for i in range(1081):
+
+        future_time = now - timedelta(seconds=5400) + timedelta(
+    seconds=i * 10
+)
+
+        future_jd, future_fr = jday(
+            future_time.year,
+            future_time.month,
+            future_time.day,
+            future_time.hour,
+            future_time.minute,
+            future_time.second
+            + future_time.microsecond / 1_000_000,
+        )
+
+        future_error, future_position, future_velocity = (
+            wentian_satellite.sgp4(
+                future_jd,
+                future_fr
+            )
+        )
+
+        if future_error == 0:
+
+            wentian_orbit.append(
+                {
+                    "time_utc": future_time.isoformat(),
+
+                    "position_km": {
+                        "x": future_position[0],
+                        "y": future_position[1],
+                        "z": future_position[2],
+                    },
+
+                    "velocity_km_s": {
+                        "x": future_velocity[0],
+                        "y": future_velocity[1],
+                        "z": future_velocity[2],
+                    },
+                }
+            )
+
+        else:
+
+            print(
+                "WENTIAN SGP4 ERROR:",
+                future_error,
+                "at",
+                future_time.isoformat()
+            )
+
+    print(
+        "WENTIAN orbit points:",
+        len(wentian_orbit)
+    )
+
+
+    # ============================================================
+    # FUTURE LEOPARD ORBIT POSITIONS
+    # 10-second intervals for approximately 3 hours
+    # ============================================================
+
+    leopard_satellite = Satrec.twoline2rv(
+        satellites[3]["line1"],
+        satellites[3]["line2"]
+    )
+
+    leopard_orbit = []
+
+    # 3 hours = 10800 seconds
+    # 10-second interval
+    # Total = 1081 points
+
+    for i in range(1081):
+
+        future_time = now - timedelta(seconds=5400) + timedelta(
+    seconds=i * 10
+)
+
+        future_jd, future_fr = jday(
+            future_time.year,
+            future_time.month,
+            future_time.day,
+            future_time.hour,
+            future_time.minute,
+            future_time.second
+            + future_time.microsecond / 1_000_000,
+        )
+
+        future_error, future_position, future_velocity = (
+            leopard_satellite.sgp4(
+                future_jd,
+                future_fr
+            )
+        )
+
+        if future_error == 0:
+
+            leopard_orbit.append(
+                {
+                    "time_utc": future_time.isoformat(),
+
+                    "position_km": {
+                        "x": future_position[0],
+                        "y": future_position[1],
+                        "z": future_position[2],
+                    },
+
+                    "velocity_km_s": {
+                        "x": future_velocity[0],
+                        "y": future_velocity[1],
+                        "z": future_velocity[2],
+                    },
+                }
+            )
+
+        else:
+
+            print(
+                "LEOPARD SGP4 ERROR:",
+                future_error,
+                "at",
+                future_time.isoformat()
+            )
+
+    print(
+        "LEOPARD orbit points:",
+        len(leopard_orbit)
+    )
+
+    # ============================================================
+# ORBITAL ELEMENT TIME SERIES
+# ============================================================
+    def build_orbital_element_series(orbit):
+
+        orbital_elements = []
+
+        for point in orbit:
+
+            elements = calculate_orbital_elements(
+            point["position_km"],
+            point["velocity_km_s"]
+                )
+
+            orbital_elements.append({
+            "time_utc": point["time_utc"],
+
+            "raan_deg":
+                elements["raan_deg"],
+
+            "inclination_deg":
+                elements["inclination_deg"],
+
+            "argument_of_perigee_deg":
+                elements["argument_of_perigee_deg"],
+
+            "semi_major_axis_km":
+                elements["semi_major_axis_km"],
+
+            "eccentricity":
+                elements["eccentricity"],
+        })
+
+        return orbital_elements
+
+    print("DEBUG ISS orbit length:", len(orbit))
+    iss_orbital_elements = (
+            build_orbital_element_series(
+                orbit
+            )
+        )
+
+    tianhe_orbital_elements = (
+            build_orbital_element_series(
+                tianhe_orbit
+            )
+        )
+
+    wentian_orbital_elements = (
+            build_orbital_element_series(
+                wentian_orbit
+            )
+        )
+
+    leopard_orbital_elements = (
+            build_orbital_element_series(
+                leopard_orbit
+            )
+        )
+
+
+    print(
+        "ISS orbital-element points:",
+        len(iss_orbital_elements)
+    )
+
+    print(
+        "TIANHE orbital-element points:",
+        len(tianhe_orbital_elements)
+    )
+
+    print(
+        "WENTIAN orbital-element points:",
+        len(wentian_orbital_elements)
+    )
+
+    print(
+        "LEOPARD orbital-element points:",
+        len(leopard_orbital_elements)
+    )
+    
+
+# ============================================================
+# API RESPONSE
+# ============================================================
+
+    return {
+    "name": "ISS",
+    "time_utc": now.isoformat(),
+
+    "segments": [
+        {
+            "name": segment["name"],
+            "line1": segment["line1"],
+            "line2": segment["line2"],
+        }
+        for segment in iss_segments
+    ],
+
+    "segment_results": segment_results,
+    "segment_distances": segment_distances,
+    "satellites": satellite_results,
+    "pairwise_distances": pairwise_distances,
+    "conjunction_candidates": candidate_pairs,
+
+    "minimum_distance_pairs": list(
+        conjunction_candidates.values()
+    ),
+
+    "divergence_over_time": divergence_over_time,
+    "error_code": error,
+
+    "position_km": {
+        "x": position[0],
+        "y": position[1],
+        "z": position[2],
+    },
+
+    "velocity_km_s": {
+        "x": velocity[0],
+        "y": velocity[1],
+        "z": velocity[2],
+    },
+
+    "orbit": orbit,
+    "tianhe_orbit": tianhe_orbit,
+    "wentian_orbit": wentian_orbit,
+    "leopard_orbit": leopard_orbit,
+    "extra_satellites": build_extra_orbits(extra_satellites, now),
+    
+    "orbital_elements": {
+        "ISS": iss_orbital_elements,
+        "TIANHE": tianhe_orbital_elements,
+        "WENTIAN": wentian_orbital_elements,
+        "LEOPARD": leopard_orbital_elements,
+        },
+    }
+    # ============================================================
+# ANALYTICS API
+# Separate 3-hour historical orbital data
+# Does NOT modify /satellite
+# ============================================================
+@app.get("/analytics")
+def get_analytics():
+
+    now = datetime.now(timezone.utc)
+
+    analytics_satellites = [
+        {
+            "name": "ISS",
+            "line1": "1 25544C 98067A   26275.58333333  .00106030  00000+0  19380-2 0    19",
+            "line2": "2 25544  51.6307 128.5929 0007126 212.8943  84.6070 15.48685067    11",
+        },
+        {
+            "name": "TIANHE",
+            "line1": "1 48274C 21035A   26275.00000000  .00113170  00000+0  13433-2 0    10",
+            "line2": "2 48274  41.4713  33.3582 0002395 321.0136  60.8438 15.60208061    15",
+        },
+        {
+            "name": "WENTIAN",
+            "line1": "1 53239U 22085A   26275.76424103  .00013894  00000+0  16924-3 0  9997",
+            "line2": "2 53239  41.4698  28.7100 0002103 323.3303  36.7391 15.60239502288232",
+        },
+        {
+            "name": "LEOPARD",
+            "line1": "1 67687U 98067YE  26275.82243670  .00180715  00000+0  92918-3 0  9991",
+            "line2": "2 67687  51.6211 106.0006 0009616 241.1757 118.8280 15.80080957 37094",
+        },
+    ]
+
+    # --------------------------------------------------------
+    # 3 HOURS IN THE PAST → CURRENT UTC TIME
+    # 10-second interval
+    # 1081 points
+    # --------------------------------------------------------
+
+    start_time = now - timedelta(hours=3)
+
+    orbital_elements = {}
+
+    for satellite_data in analytics_satellites:
+
+        satellite = Satrec.twoline2rv(
+            satellite_data["line1"],
+            satellite_data["line2"]
+        )
+
+        series = []
+
+        for i in range(1081):
+
+            current_time = start_time + timedelta(
+                seconds=i * 10
+            )
+
+            current_jd, current_fr = jday(
+                current_time.year,
+                current_time.month,
+                current_time.day,
+                current_time.hour,
+                current_time.minute,
+                current_time.second
+                + current_time.microsecond / 1_000_000,
+            )
+
+            error, position, velocity = satellite.sgp4(
+                current_jd,
+                current_fr
+            )
+
+            if error == 0:
+
+                position_km = {
+                    "x": position[0],
+                    "y": position[1],
+                    "z": position[2],
+                }
+
+                velocity_km_s = {
+                    "x": velocity[0],
+                    "y": velocity[1],
+                    "z": velocity[2],
+                }
+
+                elements = calculate_orbital_elements(
+                    position_km,
+                    velocity_km_s
+                )
+
+                series.append({
+                    "time_utc": current_time.isoformat(),
+
+                    "raan_deg":
+                        elements["raan_deg"],
+
+                    "inclination_deg":
+                        elements["inclination_deg"],
+
+                    "argument_of_perigee_deg":
+                        elements["argument_of_perigee_deg"],
+
+                    "semi_major_axis_km":
+                        elements["semi_major_axis_km"],
+
+                    "eccentricity":
+                        elements["eccentricity"],
+                })
+
+        orbital_elements[satellite_data["name"]] = series
+    for extra in load_extra_satellites([25544, 48274, 53239, 67687]):
+        orbital_elements[analytics_key(extra["name"])] = build_analytics_series(
+            extra, start_time, calculate_orbital_elements
+        )
+
+    print("\nAnalytics historical data:")
+    print("Start:", start_time.isoformat())
+    print("End  :", now.isoformat())
+
+    return {
+        "time_utc": now.isoformat(),
+        "start_time_utc": start_time.isoformat(),
+        "end_time_utc": now.isoformat(),
+        "duration_hours": 3,
+        "interval_seconds": 10,
+        "orbital_elements": orbital_elements,
+    }
+

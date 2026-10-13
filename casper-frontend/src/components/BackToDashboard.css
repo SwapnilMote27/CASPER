@@ -1,0 +1,52 @@
+.back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font: 600 13px Arial, Helvetica, sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.back-button:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+/* Formal light pages (Conjunctions, Analytics) */
+.back-button--light {
+  background: #ffffff;
+  color: #24566a;
+  border: 1px solid #8daeb8;
+}
+
+.back-button--light:hover {
+  background: #e6f1f4;
+}
+
+/* Dark pages (Live Earth) */
+.back-button--dark {
+  background: rgba(13, 22, 38, 0.9);
+  color: #e8eef9;
+  border: 1px solid #233250;
+}
+
+.back-button--dark:hover {
+  background: #1a2842;
+  border-color: #38bdf8;
+}
+
+/* Pinned over a full-screen page */
+.back-button--floating {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  pointer-events: auto;
+  z-index: 6;
+}

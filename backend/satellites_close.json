@@ -1,0 +1,98 @@
+[
+  {
+    "name": "TIANHUI 2-02A",
+    "norad_id": 49071,
+    "country": "Close-approach examples",
+    "role": "Flies close to TIANHUI 2-02B",
+    "line1": "1 49071U 21074A   26284.30757061  .00001757  00000-0  92989-4 0  9997",
+    "line2": "2 49071  97.4864 286.0388 0001598  97.5300 262.6115 15.16744132284879"
+  },
+  {
+    "name": "TIANHUI 2-02B",
+    "norad_id": 49072,
+    "country": "Close-approach examples",
+    "role": "Flies close to TIANHUI 2-02A",
+    "line1": "1 49072U 21074B   26284.30757119  .00001766  00000-0  93453-4 0  9999",
+    "line2": "2 49072  97.4863 286.0346 0001855  81.5801 278.5642 15.16744182284874"
+  },
+  {
+    "name": "TIANHUI 2-01A",
+    "norad_id": 44207,
+    "country": "Close-approach examples",
+    "role": "Flies close to TIANHUI 2-01B",
+    "line1": "1 44207U 19024A   26284.33709922  .00001800  00000-0  95095-4 0  9991",
+    "line2": "2 44207  97.4852 286.7604 0001343  88.9331 271.2056 15.16766365119741"
+  },
+  {
+    "name": "TIANHUI 2-01B",
+    "norad_id": 44209,
+    "country": "Close-approach examples",
+    "role": "Flies close to TIANHUI 2-01A",
+    "line1": "1 44209U 19024C   26284.53501551  .00001796  00000-0  94904-4 0  9995",
+    "line2": "2 44209  97.4850 286.9535 0001877  80.6302 279.5143 15.16766940412344"
+  },
+  {
+    "name": "SUPERVIEW NEO-2 05",
+    "norad_id": 68377,
+    "country": "Close-approach examples",
+    "role": "Flies close to SUPERVIEW NEO-2 06",
+    "line1": "1 68377U 26062A   26284.49607104  .00001059  00000-0  52728-4 0  9993",
+    "line2": "2 68377  97.4386 290.1460 0001630  85.7831 274.3590 15.19723742 30312"
+  },
+  {
+    "name": "SUPERVIEW NEO-2 06",
+    "norad_id": 68378,
+    "country": "Close-approach examples",
+    "role": "Flies close to SUPERVIEW NEO-2 05",
+    "line1": "1 68378U 26062B   26284.49607015  .00001094  00000-0  54399-4 0  9990",
+    "line2": "2 68378  97.4386 290.1506 0001361 109.5570 250.5812 15.19723918 30318"
+  },
+  {
+    "name": "MMS 3",
+    "norad_id": 40484,
+    "country": "Close-approach examples",
+    "role": "Flies close to MMS 4",
+    "line1": "1 40484U 15011C   26284.91668981 -.00001107  00000-0  00000-0 0  9998",
+    "line2": "2 40484  73.0586 347.4808 8243340 169.9644 325.6927  0.28324269  1368"
+  },
+  {
+    "name": "MMS 4",
+    "norad_id": 40485,
+    "country": "Close-approach examples",
+    "role": "Flies close to MMS 3",
+    "line1": "1 40485U 15011D   26284.91668981 -.00001107  00000-0  00000-0 0  9999",
+    "line2": "2 40485  73.0516 347.4649 8243468 169.9743 325.6854  0.28324308  1381"
+  },
+  {
+    "name": "VIASAT 2",
+    "norad_id": 42740,
+    "country": "Close-approach examples",
+    "role": "Flies close to STARONE D2",
+    "line1": "1 42740U 17029A   26283.50612564 -.00000272  00000-0  00000-0 0  9998",
+    "line2": "2 42740   0.0170 232.0074 0001605 289.6090 329.7508  1.00271782 34358"
+  },
+  {
+    "name": "STARONE D2",
+    "norad_id": 49055,
+    "country": "Close-approach examples",
+    "role": "Flies close to VIASAT 2",
+    "line1": "1 49055U 21069A   26282.86465128 -.00000274  00000-0  00000-0 0  9995",
+    "line2": "2 49055   0.0092 193.1098 0002633 356.8556  69.8168  1.00272110 19102"
+  },
+  {
+    "name": "HOTBIRD 13F",
+    "norad_id": 54048,
+    "country": "Close-approach examples",
+    "role": "Flies close to HOTBIRD 13G",
+    "line1": "1 54048U 22134A   26284.84211284  .00000084  00000-0  00000-0 0  9997",
+    "line2": "2 54048   0.0596 285.1996 0002069  79.5781 331.8376  1.00272466 14540"
+  },
+  {
+    "name": "HOTBIRD 13G",
+    "norad_id": 54225,
+    "country": "Close-approach examples",
+    "role": "Flies close to HOTBIRD 13F",
+    "line1": "1 54225U 22146A   26284.73424229  .00000084  00000-0  00000-0 0  9990",
+    "line2": "2 54225   0.0465 238.2964 0001981 295.3333 124.0369  1.00272337  8633"
+  }
+]

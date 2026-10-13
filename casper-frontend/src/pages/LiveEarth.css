@@ -1,0 +1,234 @@
+/* Live Earth HUD. Dark panels over the Cesium canvas. */
+
+.le-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Overlay never blocks globe dragging; only panels take pointer events. */
+.le-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  color: #e8eef9;
+}
+
+.le-panel {
+  position: absolute;
+  pointer-events: auto;
+  box-sizing: border-box;
+  background: rgba(13, 22, 38, 0.88);
+  border: 1px solid #233250;
+  border-radius: 6px;
+  padding: 14px 16px;
+  width: 250px;
+}
+
+.le-overlay,
+.le-overlay * {
+  text-align: left;
+}
+
+.le-title {
+  display: block;
+  color: #e8eef9;
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+}
+
+.le-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #93a4c3;
+}
+
+/* Left column */
+.le-picker {
+  top: 16px;
+  left: 16px;
+  width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.le-picker .le-title {
+  margin: 0;
+}
+
+.le-details {
+  top: 16px;
+  left: 312px;
+  width: 270px;
+}
+
+.le-select {
+  width: 100%;
+  height: 40px;
+  padding: 0 10px;
+  background: #0a0f1a;
+  color: #e8eef9;
+  border: 1px solid #233250;
+  border-radius: 6px;
+  font: 500 14px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.le-select:focus-visible,
+.le-check input:focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.le-select:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.le-chip {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 2px;
+}
+
+/* Position readout */
+.le-data {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.le-data dt {
+  color: #93a4c3;
+}
+
+.le-overlay .le-data dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scene clock, top right */
+.le-overlay .le-clock,
+.le-overlay .le-clock * {
+  text-align: right;
+}
+
+.le-status,
+.le-overlay .le-status {
+  text-align: center;
+}
+
+.le-clock {
+  position: absolute;
+  top: 16px;
+  right: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 8px 14px;
+  background: rgba(13, 22, 38, 0.88);
+  border: 1px solid #233250;
+  border-radius: 6px;
+}
+
+.le-clock-label {
+  font-size: 12px;
+  color: #93a4c3;
+}
+
+.le-clock-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: #38bdf8;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Imagery panel, bottom left */
+.le-layers {
+  bottom: 16px;
+  left: 16px;
+  width: 300px;
+}
+
+.le-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.le-check input {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  accent-color: #38bdf8;
+}
+
+.le-check small {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: #93a4c3;
+}
+
+.le-observed {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid #233250;
+  font-size: 13px;
+  color: #93a4c3;
+}
+
+.le-observed strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 18px;
+  color: #e8eef9;
+}
+
+/* Loading and error */
+.le-status {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  max-width: 420px;
+  padding: 14px 18px;
+  background: rgba(13, 22, 38, 0.92);
+  border: 1px solid #233250;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.le-error {
+  border-color: #f87171;
+}
+
+@media (max-width: 900px) {
+  .le-details {
+    top: auto;
+    bottom: 16px;
+    left: auto;
+    right: 16px;
+  }
+  .le-layers {
+    width: 250px;
+  }
+}

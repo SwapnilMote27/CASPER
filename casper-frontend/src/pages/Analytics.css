@@ -1,0 +1,476 @@
+/* ============================================================
+   CASPER ORBITAL ANALYTICS
+============================================================ */
+
+.orbit-page {
+  min-height: 100vh;
+  background: #dcecef;
+  color: #20363d;
+  font-family: Arial, Helvetica, sans-serif;
+  padding: 0 24px 30px;
+  box-sizing: border-box;
+}
+
+
+/* ============================================================
+   HEADER
+============================================================ */
+
+.orbit-header {
+  height: 82px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 1500px;
+  margin: 0 auto;
+}
+
+.orbit-title {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.casper-main-logo {
+  width: 95px;
+  height: 95px;
+  object-fit: contain;
+  display: block;
+}
+
+.orbit-title-text {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.orbit-title h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #263f46;
+}
+
+.orbit-object-title {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1d3b44;
+}
+
+.object-expand {
+  margin-left: 6px;
+  color: #536c73;
+}
+
+.orbit-header-right {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.casper-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.casper-header-logo {
+  width: 70px;
+  height: 70px;
+  object-fit: contain;
+  display: block;
+}
+
+.casper-brand-text {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.casper-brand-text small {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  color: #587077;
+  margin-top: 2px;
+}
+
+.menu-button {
+  border: 1px solid #9aafb5;
+  background: #edf5f6;
+  color: #314a52;
+  width: 34px;
+  height: 34px;
+  border-radius: 3px;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+
+/* ============================================================
+   CONTROLS
+============================================================ */
+
+.orbit-controls {
+  max-width: 1500px;
+  margin: 0 auto 8px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+}
+
+.range-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.range-button {
+  border: 1px solid #a6b9be;
+  background: #edf5f6;
+  color: #29434b;
+  padding: 6px 13px;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 2px;
+}
+
+.range-button:hover {
+  background: #d3e4e8;
+}
+
+.range-button.active {
+  background: #315f6b;
+  color: white;
+  border-color: #315f6b;
+}
+
+.satellite-select {
+  height: 31px;
+  border: 1px solid #9db2b8;
+  background: #eef6f7;
+  color: #29434b;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 220px;
+}
+
+.date-range {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #174ee8;
+  font-size: 12px;
+}
+
+.date-range strong {
+  color: #627980;
+}
+
+.date-range small {
+  color: #61777d;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+
+/* ============================================================
+   GRAPH PANEL
+============================================================ */
+
+.orbit-chart-panel {
+  max-width: 1500px;
+  margin: 0 auto;
+  border: 1px solid #a6bcc2;
+  background: #e4f0f2;
+  box-shadow: 0 1px 3px rgba(30, 60, 70, 0.08);
+}
+
+.chart-heading {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 18px;
+  border-bottom: 1px solid #b5c8cc;
+}
+
+.chart-heading h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #29454d;
+}
+
+.chart-heading p {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #657c82;
+}
+
+.point-counter {
+  border: 1px solid #a5b9bf;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4c656d;
+  background: #edf5f6;
+}
+
+
+/* ============================================================
+   CHART
+============================================================ */
+
+.chart-wrapper {
+  width: 100%;
+  height: 620px;
+  padding: 4px 0 0;
+  box-sizing: border-box;
+}
+
+
+/* ============================================================
+   LEGEND
+============================================================ */
+
+.orbit-legend {
+  min-height: 47px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 25px;
+  border-top: 1px solid #b7c9cd;
+  background: #dcebee;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #354f57;
+}
+
+.legend-line {
+  width: 17px;
+  height: 2px;
+  display: inline-block;
+}
+
+
+/* ============================================================
+   TOOLTIP
+============================================================ */
+
+.orbital-tooltip {
+  min-width: 245px;
+  background: rgba(242, 248, 249, 0.98);
+  border: 1px solid #8099a1;
+  box-shadow: 0 3px 12px rgba(30, 55, 65, 0.18);
+  padding: 11px 13px;
+  border-radius: 2px;
+}
+
+.tooltip-header {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #36535c;
+  border-bottom: 1px solid #c1d0d4;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.tooltip-time {
+  font-size: 10px;
+  color: #174ee8;
+  margin-bottom: 9px;
+  font-family: monospace;
+}
+
+.tooltip-value {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  font-size: 11px;
+  padding: 3px 0;
+}
+
+.tooltip-value span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #536b72;
+}
+
+.tooltip-value i {
+  width: 7px;
+  height: 7px;
+  display: inline-block;
+  border-radius: 50%;
+}
+
+.tooltip-value strong {
+  color: #20383f;
+  font-family: monospace;
+  font-size: 10px;
+}
+
+
+/* ============================================================
+   INFORMATION STRIP
+============================================================ */
+
+.orbit-information {
+  max-width: 1500px;
+  margin: 12px auto 0;
+  display: grid;
+  grid-template-columns:
+    2fr
+    1fr
+    0.8fr
+    0.8fr
+    0.8fr
+    0.8fr;
+  border: 1px solid #a6bcc2;
+  background: #e7f1f3;
+}
+
+.info-item {
+  min-height: 55px;
+  padding: 8px 13px;
+  border-right: 1px solid #bdcdd1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+}
+
+.info-item:last-child {
+  border-right: none;
+}
+
+.info-item span {
+  font-size: 9px;
+  color: #668087;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+}
+
+.info-item strong {
+  font-size: 11px;
+  color: #29444c;
+}
+
+
+/* ============================================================
+   LOADING / ERROR
+============================================================ */
+
+.orbit-loading,
+.orbit-error {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #38545c;
+  font-size: 14px;
+}
+
+.orbit-error strong {
+  color: #a02e2e;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+
+@media (max-width: 1000px) {
+
+  .orbit-page {
+    padding: 0 10px 20px;
+  }
+
+  .orbit-header {
+    height: auto;
+    padding: 14px 0;
+  }
+
+  .casper-brand {
+    display: none;
+  }
+
+  .orbit-controls {
+    flex-wrap: wrap;
+  }
+
+  .date-range {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .orbit-information {
+    grid-template-columns:
+      repeat(3, 1fr);
+  }
+
+  .info-item:nth-child(3) {
+    border-right: none;
+  }
+
+  .chart-wrapper {
+    height: 550px;
+  }
+
+}
+
+
+@media (max-width: 650px) {
+
+  .orbit-title h1 {
+    font-size: 15px;
+  }
+
+  .orbit-object-title {
+    font-size: 12px;
+  }
+
+  .casper-main-logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .orbit-information {
+    grid-template-columns:
+      repeat(2, 1fr);
+  }
+
+  .orbit-legend {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 10px;
+  }
+
+  .satellite-select {
+    width: 100%;
+  }
+
+  .range-buttons {
+    width: 100%;
+  }
+
+  .range-button {
+    flex: 1;
+  }
+
+}
